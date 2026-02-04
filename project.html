@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>No‑Code Form Builder</title>
+
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+
+            .container {
+                display: flex;
+                gap: 20px;
+                max-width: 1200px;
+                margin: auto;
+            }
+
+            /* Sidebar */
+            .sidebar {
+                width: 200px;
+                background: #fff;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+            .sidebar h3 {
+                margin-bottom: 10px;
+            }
+            .element {
+                padding: 10px;
+                margin: 8px 0;
+                background: #eee;
+                border-radius: 4px;
+                cursor: grab;
+                text-align: center;
+            }
+
+            /* Canvas */
+            .canvas {
+                flex: 1;
+                background: #fff;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+            #formCanvas {
+                min-height: 400px;
+                border: 2px dashed #ccc;
+                padding: 15px;
+            }
+            #formCanvas.drag-over {
+                border-color: #007bff;
+            }
+
+            /* Form Elements */
+            .form-element {
+                margin: 10px 0;
+                padding: 15px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: #fff;
+            }
+            .form-element.selected {
+                border: 4px solid #007bff;
+                background: #f0f8ff;
+            }
+
+            .element-header {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 10px;
+            }
+            .element-actions button {
+                margin-left: 5px;
+                cursor: pointer;
+            }
+
+            /* Nested Section */
+            .nested-container {
+                margin-top: 10px;
+                padding: 10px;
+                border: 2px dashed #eee;
+                min-height: 50px;
+            }
+
+            /* Properties */
+            .properties {
+                width: 280px;
+                background: #fff;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+            .property-group label {
+                display: block;
+                margin: 5px 0;
+            }
+            .property-group input,
+            select {
+                width: 100%;
+                padding: 6px;
+                margin-bottom: 10px;
+            }
+
+            /* Preview */
+            .preview {
+                margin-top: 20px;
+            }
+            #previewCode {
+                width: 100%;
+                height: 150px;
+                background: #f8f8f8;
+                border: 1px solid #ddd;
+                padding: 10px;
+                overflow: auto;
+            }
+
+            .actions {
+                margin-top: 15px;
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+            }
+
+            button {
+                padding: 8px 14px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+
+            .btn-primary {
+                background: #007bff;
+                color: #fff;
+            }
+            .btn-secondary {
+                background: #6c757d;
+                color: #fff;
+            }
+
+            .empty-message {
+                text-align: center;
+                color: #666;
+                padding: 40px 0;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <!-- SIDEBAR -->
+            <div class="sidebar">
+                <h3>Elements</h3>
+                <div class="element" draggable="true" data-type="text">
+                    Text
+                </div>
+                <div class="element" draggable="true" data-type="email">
+                    Email
+                </div>
+                <div class="element" draggable="true" data-type="number">
+                    Number
+                </div>
+                <div class="element" draggable="true" data-type="textarea">
+                    Textarea
+                </div>
+                <div class="element" draggable="true" data-type="checkbox">
+                    Checkbox
+                </div>
+                <div class="element" draggable="true" data-type="select">
+                    Dropdown
+                </div>
+                <div class="element" draggable="true" data-type="button">
+                    Button
+                </div>
+                <div class="element" draggable="true" data-type="section">
+                    Section
+                </div>
+            </div>
+
+            <!-- CANVAS -->
+            <div class="canvas">
+                <h3>Canvas</h3>
+                <div id="formCanvas">
+                    <div class="empty-message">Drag elements here</div>
+                </div>
+
+                <div class="preview">
+                    <h3>Generated HTML</h3>
+                    <pre id="previewCode"></pre>
+                </div>
+
+                <div class="actions">
+                    <button class="btn-secondary" id="previewBtn">
+                        Preview
+                    </button>
+                    <button class="btn-primary" id="exportBtn">Export</button>
+                    <button class="btn-secondary" id="resetBtn">Reset</button>
+                </div>
+            </div>
+
+            <!-- PROPERTIES -->
+            <div class="properties">
+                <h3>Properties</h3>
+                <div id="propertiesContent">
+                    <div class="empty-message">Select an element</div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            /**
+             * Global State Management
+             * - formElements: Array to store the JSON representation of the form structure.
+             * - selectedElement: Stores the ID of the currently selected element for property editing.
+             * - counter: A simple incrementing counter to generate unique IDs for new elements.
+             */
+            const formElements = [];
+            let selectedElement = null;
+            let counter = 0;
+
+            /**
+             * DOM Element References
+             * - canvas: The main drop area where the form is built.
+             * - props: The sidebar panel where element properties (label, placeholder, etc.) are edited.
+             * - preview: The textarea/container that shows the raw generated HTML code.
+             */
+            const canvas = document.getElementById("formCanvas");
+            const props = document.getElementById("propertiesContent");
+            const preview = document.getElementById("previewCode");
+
+            /**
+             * Initialize Drag-and-Drop for Sidebar Elements
+             * attaching 'dragstart' listeners to all draggable items in the sidebar.
+             * When dragging starts, we store the element 'type' (e.g., 'text', 'email') in the dataTransfer object.
+             */
+            document.querySelectorAll(".element").forEach((el) => {
+                el.addEventListener("dragstart", (e) => {
+                    e.dataTransfer.setData("type", el.dataset.type);
+                });
+            });
+
+            /**
+             * Canvas Drag-and-Drop Handlers
+             * - dragover: Allows dropping by preventing the default behavior. Adds visual feedback (.drag-over).
+             * - dragleave: Removes visual feedback when the dragged item leaves the canvas area.
+             * - drop: Handles the actual drop event. Retrieves the 'type' data and calls addElement().
+             */
+            canvas.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                canvas.classList.add("drag-over");
+            });
+
+            canvas.addEventListener("dragleave", () =>
+                canvas.classList.remove("drag-over"),
+            );
+
+            canvas.addEventListener("drop", (e) => {
+                e.preventDefault();
+                canvas.classList.remove("drag-over");
+                addElement(e.dataTransfer.getData("type"));
+            });
+
+            /**
+             * addElement Function
+             * Creates a new form element, updates the data model, and renders it to the DOM.
+             * @param {string} type - The type of element to add (e.g., 'text', 'button', 'section').
+             * @param {string|null} parentId - The ID of a parent section if this is a nested element.
+             */
+            function addElement(type, parentId = null) {
+                counter++;
+
+                // create the data model for the new element
+                const data = {
+                    id: "el-" + counter, // Unique ID
+                    type, // Element type
+                    label: type, // Default label (can be edited)
+                    placeholder: "", // Default placeholder
+                    required: false, // Default required state
+                    options: type === "select" ? ["Option 1", "Option 2"] : [], // Default options for dropdowns
+                    children: [], // Array to hold child elements if this is a container (section)
+                };
+
+                // If it's a root element, add to main list. Nested elements are added later via parent logic.
+                if (!parentId) formElements.push(data);
+
+                // Create the DOM representation of the element
+                const div = document.createElement("div");
+                div.className = "form-element";
+                div.id = data.id;
+
+                // Render the inner HTML of the element wrapper
+                // Includes header (label + actions) and the actual input content.
+                // If it's a section, we add a nested-container div for dropping children.
+                div.innerHTML = `
+    <div class="element-header">
+      <strong>${data.label}</strong>
+      <div class="element-actions">
+        <button onclick="selectElement('${data.id}')">Edit</button>
+        <button onclick="deleteElement('${data.id}')">Delete</button>
+      </div>
+    </div>
+    <div class="element-content">${renderHTML(data)}</div>
+    ${type === "section" ? '<div class="nested-container"></div>' : ""}
+  `;
+
+                // Attach click handler to select the element when clicked
+                // stopPropagation ensures clicking a child doesn't trigger the parent's selection logic immediately
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    selectElement(data.id);
+                };
+
+                // Handle placement logic:
+                // If parentId exists, find the parent in DOM and data model, and append accordingly.
+                // Otherwise, append to the main canvas.
+                if (parentId) {
+                    const parent = document.getElementById(parentId);
+                    parent.querySelector(".nested-container").appendChild(div);
+                    const parentData = findElement(parentId);
+                    parentData.children.push(data);
+                } else {
+                    // Remove "Drag elements here" message if it exists
+                    const empty = canvas.querySelector(".empty-message");
+                    if (empty) empty.remove();
+                    canvas.appendChild(div);
+                }
+
+                // If the new element is a section (container), initialize it as a drop zone.
+                if (type === "section")
+                    setupNested(div.querySelector(".nested-container"));
+
+                // Refresh the global HTML preview
+                updatePreview();
+            }
+
+            /**
+             * Setup Nested Drop Zones
+             * Makes a specific container (inside a Section) capable of accepting dropped elements.
+             * @param {HTMLElement} container - The DOM element to become a drop zone.
+             */
+            function setupNested(container) {
+                container.addEventListener("dragover", (e) =>
+                    e.preventDefault(),
+                );
+                container.addEventListener("drop", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // Prevent bubbling to the main canvas drop handler
+                    const parentId = container.closest(".form-element").id;
+                    addElement(e.dataTransfer.getData("type"), parentId);
+                });
+            }
+
+            /**
+             * Select Element
+             * Highlights the chosen element in the canvas and populates the properties panel.
+             * @param {string} id - The ID of the element to select.
+             */
+            function selectElement(id) {
+                // Clear previous selection styles
+                document
+                    .querySelectorAll(".form-element")
+                    .forEach((el) => el.classList.remove("selected"));
+
+                // Highlight new selection
+                const el = document.getElementById(id);
+                el.classList.add("selected");
+                selectedElement = id;
+
+                // Find data object and show its properties
+                showProperties(findElement(id));
+            }
+
+            /**
+             * Show Properties
+             * Renders the property editor inputs (Label, Placeholder, Required) in the sidebar.
+             * @param {object} data - The data object of the selected element.
+             */
+            function showProperties(data) {
+                props.innerHTML = `
+    <div class="property-group">
+      <label>Label</label>
+      <input value="${data.label}" onchange="updateProp('${data.id}','label',this.value)">
+
+      <label>Placeholder</label>
+      <input value="${data.placeholder}" onchange="updateProp('${data.id}','placeholder',this.value)">
+
+      <label>
+        <input type="checkbox" ${data.required ? "checked" : ""}
+        onchange="updateProp('${data.id}','required',this.checked)"> Required
+      </label>
+    </div>
+  `;
+            }
+
+            /**
+             * Update Property
+             * Updates the data model when a user changes a value in the properties panel.
+             * Also re-renders the element in the canvas to reflect changes immediately.
+             * @param {string} id - The ID of the element being edited.
+             * @param {string} prop - The property key to update (e.g., 'label').
+             * @param {any} val - The new value.
+             */
+            function updateProp(id, prop, val) {
+                const data = findElement(id);
+                data[prop] = val;
+
+                const el = document.getElementById(id);
+                // Re-render the input/content part
+                el.querySelector(".element-content").innerHTML =
+                    renderHTML(data);
+                // Update the header label text
+                el.querySelector("strong").textContent = data.label;
+
+                // Refresh the global HTML code preview
+                updatePreview();
+            }
+
+            /**
+             * Delete Element
+             * Removes an element from both the Data Model and the DOM.
+             * @param {string} id - The ID of the element to delete.
+             */
+            function deleteElement(id) {
+                // Remove from data structure (recursive search/delete)
+                removeData(id, formElements);
+
+                // Remove from DOM
+                const el = document.getElementById(id);
+                if (el) el.remove();
+
+                selectedElement = null;
+                props.innerHTML =
+                    '<div class="empty-message">Select an element</div>';
+
+                // Reset empty message if canvas is cleared
+                if (!canvas.querySelector(".form-element")) {
+                    canvas.innerHTML =
+                        '<div class="empty-message">Drag elements here</div>';
+                }
+
+                updatePreview();
+            }
+
+            /**
+             * Remove Data (Helper)
+             * Recursively finds and removes an object with the given ID from the hierarchy.
+             * @param {string} id - Target ID.
+             * @param {Array} list - The list to search (starts with formElements).
+             */
+            function removeData(id, list) {
+                for (let i = 0; i < list.length; i++) {
+                    if (list[i].id === id) return list.splice(i, 1);
+                    // Recursive call for nested children
+                    removeData(id, list[i].children);
+                }
+            }
+
+            /**
+             * Find Element (Helper)
+             * Recursively searches for an element object by ID.
+             * @param {string} id - Target ID.
+             * @param {Array} list - The list to search.
+             * @returns {object|undefined} - The found element data object.
+             */
+            function findElement(id, list = formElements) {
+                for (const el of list) {
+                    if (el.id === id) return el;
+                    const found = findElement(id, el.children);
+                    if (found) return found;
+                }
+            }
+
+            /**
+             * Render HTML (For Canvas Display)
+             * Generates the HTML string for an element to be displayed inside the Canvas editor.
+             * This is "editor-view" HTML (visual representation).
+             * @param {object} d - The element data object.
+             * @returns {string} - HTML string.
+             */
+            function renderHTML(d) {
+                const req = d.required ? "required" : "";
+                switch (d.type) {
+                    case "text":
+                    case "email":
+                    case "number":
+                        return `<label>${d.label}</label><input type="${d.type}" placeholder="${d.placeholder}" ${req}>`;
+                    case "textarea":
+                        return `<label>${d.label}</label><textarea placeholder="${d.placeholder}" ${req}></textarea>`;
+                    case "checkbox":
+                        return `<label><input type="checkbox" ${req}> ${d.label}</label>`;
+                    case "select":
+                        return `<label>${d.label}</label><select>${d.options.map((o) => `<option>${o}</option>`).join("")}</select>`;
+                    case "button":
+                        return `<button>${d.label}</button>`;
+                    case "section":
+                        return `<strong>${d.label}</strong>`;
+                }
+            }
+
+            /**
+             * Build HTML (For Code Export)
+             * Recursively generates the clean, final HTML code structure for the user to export.
+             * Handles nested layouts (sections) by using <fieldset> or similar containers.
+             * @param {object} el - The element data object.
+             * @returns {string} - Final HTML string.
+             */
+            function buildHTML(el) {
+                if (el.type === "section") {
+                    return `<fieldset><legend>${el.label}</legend>${el.children.map(buildHTML).join("")}</fieldset>`;
+                }
+                return renderHTML(el);
+            }
+
+            /**
+             * Update Preview
+             * Regenerates the "Generated HTML" block at the bottom of the canvas.
+             * Wraps everything in a <form> tag.
+             */
+            function updatePreview() {
+                preview.textContent =
+                    "<form>\n" +
+                    formElements.map(buildHTML).join("\n") +
+                    "\n</form>";
+            }
+
+            /**
+             * Export Button Handler
+             * Copies the generated HTML code to the system clipboard.
+             */
+            document.getElementById("exportBtn").onclick = () => {
+                navigator.clipboard.writeText(preview.textContent);
+                alert("HTML copied!");
+            };
+
+            /**
+             * Reset Button Handler
+             * Clears the canvas, data model, properties panel, and preview.
+             */
+            document.getElementById("resetBtn").onclick = () => {
+                formElements.length = 0; // Clear array
+                canvas.innerHTML =
+                    '<div class="empty-message">Drag elements here</div>';
+                props.innerHTML =
+                    '<div class="empty-message">Select an element</div>';
+                updatePreview();
+            };
+        </script>
+    </body>
+</html>
